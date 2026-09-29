@@ -1,0 +1,40 @@
+import { Global, Module, OnModuleDestroy, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+import * as schema from './schema';
+
+export const DB = Symbol('DB');
+export const PG_POOL = Symbol('PG_POOL');
+
+export type Database = NodePgDatabase<typeof schema>;
+
+@Global()
+@Module({
+  providers: [
+    {
+      provide: PG_POOL,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new Pool({
+          connectionString: config.getOrThrow<string>('DATABASE_URL'),
+          max: config.getOrThrow<number>('DATABASE_POOL_MAX'),
+          // Fail fast rather than queueing behind an unreachable database.
+          connectionTimeoutMillis: 5_000,
+        }),
+    },
+    {
+      provide: DB,
+      inject: [PG_POOL],
+      useFactory: (pool: Pool): Database => drizzle(pool, { schema }),
+    },
+  ],
+  exports: [DB, PG_POOL],
+})
+export class DbModule implements OnModuleDestroy {
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+
+  async onModuleDestroy(): Promise<void> {
+    await this.pool.end();
+  }
+}
