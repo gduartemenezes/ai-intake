@@ -1,0 +1,21 @@
+{
+  "name": "ai-intake",
+  "version": "0.0.1",
+  "private": true,
+  "description": "AI-assisted document intake with deterministic validation and human review",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm --filter @intake/api dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @intake/api db:generate",
+    "db:migrate": "pnpm --filter @intake/api db:migrate"
+  }
+}
