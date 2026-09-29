@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: intake
+          POSTGRES_PASSWORD: intake
+          POSTGRES_DB: intake
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U intake -d intake"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://intake:intake@localhost:5432/intake
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      - name: Boot and probe /health
+        run: |
+          node apps/api/dist/main.js &
+          API_PID=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/health > /tmp/health.json; then
+              cat /tmp/health.json
+              kill $API_PID
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become healthy in 30s"
+          kill $API_PID || true
+          exit 1
